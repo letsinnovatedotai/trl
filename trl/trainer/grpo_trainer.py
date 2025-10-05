@@ -84,7 +84,7 @@ if is_wandb_available():
 
 
 logger = logging.get_logger(__name__)
-
+print("My Version of GRPO")
 # What we call a reward function is a callable that takes a list of prompts and completions and returns a list of
 # rewards. When it's a string, it's a model ID, so it's loaded as a pretrained model.
 RewardFunc = Union[str, PreTrainedModel, Callable[[list, list], list[float]]]
@@ -517,6 +517,7 @@ class GRPOTrainer(Trainer):
         optimizers: tuple[Optional[torch.optim.Optimizer], Optional[torch.optim.lr_scheduler.LambdaLR]] = (None, None),
         peft_config: Optional["PeftConfig"] = None,
     ):
+        print("GRPO init called")
         # Args
         if args is None:
             model_name = model if isinstance(model, str) else model.config._name_or_path
