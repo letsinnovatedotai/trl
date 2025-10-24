@@ -14,12 +14,13 @@
 
 # /// script
 # dependencies = [
-#     "trl @ git+https://github.com/huggingface/trl.git",
+#     "trl",
 #     "peft",
 #     "einops",
 #     "scikit-learn",
 #     "joblib",
 #     "trackio",
+#     "kernels",
 # ]
 # ///
 
@@ -84,7 +85,8 @@ from accelerate import Accelerator
 from datasets import load_dataset
 from transformers import AutoModel, AutoModelForCausalLM, AutoTokenizer, HfArgumentParser, PreTrainedModel
 
-from trl import BCOConfig, BCOTrainer, ModelConfig, ScriptArguments, get_peft_config
+from trl import ModelConfig, ScriptArguments, get_peft_config
+from trl.experimental.bco import BCOConfig, BCOTrainer
 
 
 # Enable logging in a Hugging Face Space
@@ -141,7 +143,7 @@ if __name__ == "__main__":
         "nomic-ai/nomic-embed-text-v1.5",
         trust_remote_code=model_args.trust_remote_code,
         safe_serialization=True,
-        torch_dtype=torch.bfloat16,
+        dtype=torch.bfloat16,
         device_map="auto",
     )
     embedding_model = accelerator.prepare_model(embedding_model)

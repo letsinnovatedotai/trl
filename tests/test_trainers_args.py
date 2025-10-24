@@ -11,10 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
+import pytest
 from datasets import load_dataset
-from parameterized import parameterized
 from transformers import AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer
 
 from trl import (
@@ -24,6 +22,7 @@ from trl import (
     CPOTrainer,
     DPOConfig,
     DPOTrainer,
+    FDivergenceType,
     KTOConfig,
     KTOTrainer,
     NashMDConfig,
@@ -43,7 +42,7 @@ from trl import (
 from .testing_utils import TrlTestCase, require_sklearn
 
 
-class TrainerArgTester(TrlTestCase):
+class TestTrainerArg(TrlTestCase):
     @require_sklearn
     def test_bco(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -75,22 +74,22 @@ class TrainerArgTester(TrlTestCase):
             train_dataset=dataset,
             processing_class=tokenizer,
         )
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.max_prompt_length, 64)
-        self.assertEqual(trainer.args.max_completion_length, 64)
-        self.assertEqual(trainer.args.beta, 0.5)
-        self.assertEqual(trainer.args.label_pad_token_id, -99)
-        self.assertEqual(trainer.args.padding_value, -99)
-        self.assertEqual(trainer.args.truncation_mode, "keep_start")
+        assert trainer.args.max_length == 256
+        assert trainer.args.max_prompt_length == 64
+        assert trainer.args.max_completion_length == 64
+        assert trainer.args.beta == 0.5
+        assert trainer.args.label_pad_token_id == -99
+        assert trainer.args.padding_value == -99
+        assert trainer.args.truncation_mode == "keep_start"
         # self.assertEqual(trainer.args.generate_during_eval, True)
-        self.assertEqual(trainer.args.is_encoder_decoder, True)
-        self.assertEqual(trainer.args.precompute_ref_log_probs, True)
-        self.assertEqual(trainer.args.model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.ref_model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
-        self.assertEqual(trainer.args.prompt_sample_size, 512)
-        self.assertEqual(trainer.args.min_density_ratio, 0.2)
-        self.assertEqual(trainer.args.max_density_ratio, 20.0)
+        assert trainer.args.is_encoder_decoder
+        assert trainer.args.precompute_ref_log_probs
+        assert trainer.args.model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.ref_model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.dataset_num_proc == 4
+        assert trainer.args.prompt_sample_size == 512
+        assert trainer.args.min_density_ratio == 0.2
+        assert trainer.args.max_density_ratio == 20.0
 
     def test_cpo(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -116,22 +115,22 @@ class TrainerArgTester(TrlTestCase):
             dataset_num_proc=4,
         )
         trainer = CPOTrainer(model=model_id, args=training_args, train_dataset=dataset, processing_class=tokenizer)
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.max_prompt_length, 64)
-        self.assertEqual(trainer.args.max_completion_length, 64)
-        self.assertEqual(trainer.args.beta, 0.5)
-        self.assertEqual(trainer.args.label_smoothing, 0.5)
-        self.assertEqual(trainer.args.loss_type, "hinge")
-        self.assertEqual(trainer.args.disable_dropout, False)
-        self.assertEqual(trainer.args.cpo_alpha, 0.5)
-        self.assertEqual(trainer.args.simpo_gamma, 0.2)
-        self.assertEqual(trainer.args.label_pad_token_id, -99)
-        self.assertEqual(trainer.args.padding_value, -99)
-        self.assertEqual(trainer.args.truncation_mode, "keep_start")
+        assert trainer.args.max_length == 256
+        assert trainer.args.max_prompt_length == 64
+        assert trainer.args.max_completion_length == 64
+        assert trainer.args.beta == 0.5
+        assert trainer.args.label_smoothing == 0.5
+        assert trainer.args.loss_type == "hinge"
+        assert not trainer.args.disable_dropout
+        assert trainer.args.cpo_alpha == 0.5
+        assert trainer.args.simpo_gamma == 0.2
+        assert trainer.args.label_pad_token_id == -99
+        assert trainer.args.padding_value == -99
+        assert trainer.args.truncation_mode == "keep_start"
         # self.assertEqual(trainer.args.generate_during_eval, True)
-        self.assertEqual(trainer.args.is_encoder_decoder, True)
-        self.assertEqual(trainer.args.model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
+        assert trainer.args.is_encoder_decoder
+        assert trainer.args.model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.dataset_num_proc == 4
 
     def test_dpo(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -143,7 +142,7 @@ class TrainerArgTester(TrlTestCase):
             label_smoothing=0.5,
             loss_type="hinge",
             label_pad_token_id=-99,
-            padding_value=-99,
+            pad_token=".",
             truncation_mode="keep_start",
             max_length=256,
             max_prompt_length=64,
@@ -173,32 +172,32 @@ class TrainerArgTester(TrlTestCase):
             train_dataset=dataset,
             processing_class=tokenizer,
         )
-        self.assertEqual(trainer.args.beta, 0.5)
-        self.assertEqual(trainer.args.label_smoothing, 0.5)
-        self.assertEqual(trainer.args.loss_type, "hinge")
-        self.assertEqual(trainer.args.label_pad_token_id, -99)
-        self.assertEqual(trainer.args.padding_value, -99)
-        self.assertEqual(trainer.args.truncation_mode, "keep_start")
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.max_prompt_length, 64)
-        self.assertEqual(trainer.args.max_completion_length, 64)
-        self.assertEqual(trainer.args.disable_dropout, False)
+        assert trainer.args.beta == 0.5
+        assert trainer.args.label_smoothing == 0.5
+        assert trainer.args.loss_type == "hinge"
+        assert trainer.args.label_pad_token_id == -99
+        assert trainer.args.pad_token == "."
+        assert trainer.args.truncation_mode == "keep_start"
+        assert trainer.args.max_length == 256
+        assert trainer.args.max_prompt_length == 64
+        assert trainer.args.max_completion_length == 64
+        assert not trainer.args.disable_dropout
         # self.assertEqual(trainer.args.generate_during_eval, True)
-        self.assertEqual(trainer.args.precompute_ref_log_probs, True)
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
-        self.assertEqual(trainer.args.model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.ref_model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.model_adapter_name, "dummy_adapter")
-        self.assertEqual(trainer.args.ref_adapter_name, "dummy_adapter")
-        self.assertEqual(trainer.args.reference_free, True)
-        self.assertEqual(trainer.args.force_use_ref_model, True)
-        self.assertEqual(trainer.args.f_divergence_type, "js_divergence")
-        self.assertEqual(trainer.args.f_alpha_divergence_coef, 0.5)
+        assert trainer.args.precompute_ref_log_probs
+        assert trainer.args.dataset_num_proc == 4
+        assert trainer.args.model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.ref_model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.model_adapter_name == "dummy_adapter"
+        assert trainer.args.ref_adapter_name == "dummy_adapter"
+        assert trainer.args.reference_free
+        assert trainer.args.force_use_ref_model
+        assert trainer.args.f_divergence_type == FDivergenceType.JS_DIVERGENCE
+        assert trainer.args.f_alpha_divergence_coef == 0.5
         # self.assertEqual(trainer.args.sync_ref_model, True)
-        self.assertEqual(trainer.args.ref_model_mixup_alpha, 0.5)
-        self.assertEqual(trainer.args.ref_model_sync_steps, 32)
-        self.assertEqual(trainer.args.rpo_alpha, 0.5)
-        self.assertEqual(trainer.args.discopop_tau, 0.1)
+        assert trainer.args.ref_model_mixup_alpha == 0.5
+        assert trainer.args.ref_model_sync_steps == 32
+        assert trainer.args.rpo_alpha == 0.5
+        assert trainer.args.discopop_tau == 0.1
 
     def test_kto(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -229,23 +228,23 @@ class TrainerArgTester(TrlTestCase):
             train_dataset=dataset,
             processing_class=tokenizer,
         )
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.max_prompt_length, 64)
-        self.assertEqual(trainer.args.max_completion_length, 64)
-        self.assertEqual(trainer.args.beta, 0.5)
-        self.assertEqual(trainer.args.desirable_weight, 0.5)
-        self.assertEqual(trainer.args.undesirable_weight, 0.5)
-        self.assertEqual(trainer.args.label_pad_token_id, -99)
-        self.assertEqual(trainer.args.padding_value, -99)
-        self.assertEqual(trainer.args.truncation_mode, "keep_start")
+        assert trainer.args.max_length == 256
+        assert trainer.args.max_prompt_length == 64
+        assert trainer.args.max_completion_length == 64
+        assert trainer.args.beta == 0.5
+        assert trainer.args.desirable_weight == 0.5
+        assert trainer.args.undesirable_weight == 0.5
+        assert trainer.args.label_pad_token_id == -99
+        assert trainer.args.padding_value == -99
+        assert trainer.args.truncation_mode == "keep_start"
         # self.assertEqual(trainer.args.generate_during_eval, True)
-        self.assertEqual(trainer.args.is_encoder_decoder, True)
-        self.assertEqual(trainer.args.precompute_ref_log_probs, True)
-        self.assertEqual(trainer.args.model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.ref_model_init_kwargs, {"trust_remote_code": True})
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
+        assert trainer.args.is_encoder_decoder
+        assert trainer.args.precompute_ref_log_probs
+        assert trainer.args.model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.ref_model_init_kwargs == {"trust_remote_code": True}
+        assert trainer.args.dataset_num_proc == 4
 
-    @parameterized.expand([(False,), (True,)])
+    @pytest.mark.parametrize("mixtures_coef_list", [False, True])
     def test_nash_md(self, mixtures_coef_list):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -262,12 +261,12 @@ class TrainerArgTester(TrlTestCase):
             processing_class=tokenizer,
             model=model,
             ref_model=ref_model,
-            reward_model=reward_model,
+            reward_funcs=reward_model,
             train_dataset=dataset,
         )
-        self.assertEqual(trainer.args.mixture_coef, 0.5 if not mixtures_coef_list else [0.5, 0.6])
+        assert trainer.args.mixture_coef == (0.5 if not mixtures_coef_list else [0.5, 0.6])
 
-    @parameterized.expand([(False,), (True,)])
+    @pytest.mark.parametrize("beta_list", [False, True])
     def test_online_dpo(self, beta_list):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -282,23 +281,21 @@ class TrainerArgTester(TrlTestCase):
             missing_eos_penalty=0.33,
             beta=0.6 if not beta_list else [0.6, 0.7],
             loss_type="hinge",
-            dataset_num_proc=4,
         )
         trainer = OnlineDPOTrainer(
             model=model,
             ref_model=ref_model,
-            reward_model=reward_model,
+            reward_funcs=reward_model,
             args=training_args,
             train_dataset=dataset,
             processing_class=tokenizer,
-            reward_processing_class=tokenizer,
+            reward_processing_classes=tokenizer,
         )
-        self.assertEqual(trainer.args.max_new_tokens, 42)
-        self.assertEqual(trainer.args.temperature, 0.5)
-        self.assertEqual(trainer.args.missing_eos_penalty, 0.33)
-        self.assertEqual(trainer.args.beta, 0.6 if not beta_list else [0.6, 0.7])
-        self.assertEqual(trainer.args.loss_type, "hinge")
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
+        assert trainer.args.max_new_tokens == 42
+        assert trainer.args.temperature == 0.5
+        assert trainer.args.missing_eos_penalty == 0.33
+        assert trainer.args.beta == (0.6 if not beta_list else [0.6, 0.7])
+        assert trainer.args.loss_type == "hinge"
 
     def test_orpo(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -320,12 +317,12 @@ class TrainerArgTester(TrlTestCase):
             dataset_num_proc=4,
         )
         trainer = ORPOTrainer(model=model_id, args=training_args, train_dataset=dataset, processing_class=tokenizer)
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.max_prompt_length, 64)
-        self.assertEqual(trainer.args.max_completion_length, 64)
-        self.assertEqual(trainer.args.beta, 0.5)
-        self.assertEqual(trainer.args.disable_dropout, False)
-        self.assertEqual(trainer.args.label_pad_token_id, -99)
+        assert trainer.args.max_length == 256
+        assert trainer.args.max_prompt_length == 64
+        assert trainer.args.max_completion_length == 64
+        assert trainer.args.beta == 0.5
+        assert not trainer.args.disable_dropout
+        assert trainer.args.label_pad_token_id == -99
 
     def test_reward(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -344,9 +341,9 @@ class TrainerArgTester(TrlTestCase):
             train_dataset=dataset,
             processing_class=tokenizer,
         )
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
-        self.assertEqual(trainer.args.center_rewards_coefficient, 0.1)
+        assert trainer.args.max_length == 256
+        assert trainer.args.dataset_num_proc == 4
+        assert trainer.args.center_rewards_coefficient == 0.1
 
     def test_sft(self):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
@@ -363,17 +360,17 @@ class TrainerArgTester(TrlTestCase):
             eval_packing=True,
         )
         trainer = SFTTrainer(model_id, args=training_args, train_dataset=dataset)
-        self.assertEqual(trainer.args.dataset_text_field, "dummy_text_field")
-        self.assertEqual(trainer.args.packing, True)
-        self.assertEqual(trainer.args.max_length, 256)
-        self.assertEqual(trainer.args.dataset_num_proc, 4)
-        self.assertEqual(trainer.args.neftune_noise_alpha, 0.1)
-        self.assertEqual(trainer.args.model_init_kwargs, {"trust_remote_code": True})
-        self.assertIn("append_concat_token", trainer.args.dataset_kwargs)
-        self.assertEqual(trainer.args.dataset_kwargs["append_concat_token"], True)
-        self.assertEqual(trainer.args.eval_packing, True)
+        assert trainer.args.dataset_text_field == "dummy_text_field"
+        assert trainer.args.packing
+        assert trainer.args.max_length == 256
+        assert trainer.args.dataset_num_proc == 4
+        assert trainer.args.neftune_noise_alpha == 0.1
+        assert trainer.args.model_init_kwargs == {"trust_remote_code": True}
+        assert "append_concat_token" in trainer.args.dataset_kwargs
+        assert trainer.args.dataset_kwargs["append_concat_token"]
+        assert trainer.args.eval_packing
 
-    @parameterized.expand([(False,), (True,)])
+    @pytest.mark.parametrize("alpha_list", [False, True])
     def test_xpo(self, alpha_list):
         model_id = "trl-internal-testing/tiny-Qwen2ForCausalLM-2.5"
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -390,7 +387,7 @@ class TrainerArgTester(TrlTestCase):
             processing_class=tokenizer,
             model=model,
             ref_model=ref_model,
-            reward_model=reward_model,
+            reward_funcs=reward_model,
             train_dataset=dataset,
         )
-        self.assertEqual(trainer.args.alpha, 0.5 if not alpha_list else [0.5, 0.6])
+        assert trainer.args.alpha == (0.5 if not alpha_list else [0.5, 0.6])
