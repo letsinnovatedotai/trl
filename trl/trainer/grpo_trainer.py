@@ -1356,7 +1356,7 @@ class GRPOTrainer(BaseTrainer):
         clog("END _calculate_rewards", f"rewards_per_func.shape={tuple(rewards_per_func.shape)}")
         return rewards_per_func
 
-    def _generate_single_turn(self, prompts: list[str], images: Optional[list]):
+    def _generate_single_turn(self, prompts: list[str], images: Optional[list], audios: Optional[list]):
         clog("ENTER _generate_single_turn",
              f"num_prompts={len(prompts)}",
              f"images={'None' if images is None else 'set'}",
@@ -1383,6 +1383,7 @@ class GRPOTrainer(BaseTrainer):
         ]
         clog("_generate_single_turn prompts_text", f"prompts_text={prompts_text}")
         if images is not None:
+            clog( f"images={images}")
             prompt_inputs = self.processing_class(
                 text=prompts_text, padding=True, return_tensors="pt", **kwargs
             )
@@ -1393,8 +1394,10 @@ class GRPOTrainer(BaseTrainer):
                 if k not in ["input_ids", "attention_mask"]
             }
         else:
+            clog("_generate_single_turn no images")
             forward_kwargs = {}
 
+        clog( f"forward_kwargs={forward_kwargs}")
         # Generate completions using either vLLM or regular generation
         if self.use_vllm:
             clog("_generate_single_turn using vLLM")
@@ -1622,16 +1625,32 @@ class GRPOTrainer(BaseTrainer):
             clog("_generate_single_turn using transformers")
             # Regular generation path
             clog("_generate_single_turn prompts_text", f"prompts_text={prompts_text}")
-            generate_inputs = self.processing_class(
-                text=prompts_text,
-                return_tensors="pt",
-                padding=True,
-                padding_side="left",
-                max_length=self.max_prompt_length,
-                truncation=True,
-                add_special_tokens=False,
-                **kwargs,
-            )
+
+            if audios is not None:
+                clog("audios is not None")
+                generate_inputs = self.processing_class(
+                    text=prompts_text,
+                    return_tensors="pt",
+                    padding=True,
+                    padding_side="left",
+                    max_length=self.max_prompt_length,
+                    truncation=True,
+                    add_special_tokens=False,
+                    audios=audios,
+                    **kwargs,
+                )
+            else:
+                clog("audios is None")
+                generate_inputs = self.processing_class(
+                    text=prompts_text,
+                    return_tensors="pt",
+                    padding=True,
+                    padding_side="left",
+                    max_length=self.max_prompt_length,
+                    truncation=True,
+                    add_special_tokens=False,
+                    **kwargs,
+                )
             generate_inputs = super()._prepare_inputs(generate_inputs)
             clog("_generate_single_turn generate_inputs", f"generate_inputs={generate_inputs}")
 
@@ -1687,13 +1706,13 @@ class GRPOTrainer(BaseTrainer):
              f"completion_ids_len={len(completion_ids)}")
         return prompt_ids, completion_ids, logprobs, forward_kwargs
 
-    def _generate(self, prompts: list[str], images: Optional[list]):
+    def _generate(self, prompts: list[str], images: Optional[list], audios: Optional[list]):
         clog("ENTER _generate", f"num_prompts={len(prompts)}","2.1.1")
         device = self.accelerator.device
         mode = "train" if self.model.training else "eval"
 
         prompt_ids, completion_ids, logprobs, forward_kwargs = (
-            self._generate_single_turn(prompts, images)
+            self._generate_single_turn(prompts, images, audios)
         )
 
         # Get completion length per sequence, used for logging
@@ -1771,6 +1790,7 @@ class GRPOTrainer(BaseTrainer):
 
         prompts = [x["prompt"] for x in inputs]
         clog("prompts are ",prompts)
+
         if "images" in inputs[0]:
             images = [example.get("images") for example in inputs]
         elif "image" in inputs[0]:
@@ -1780,9 +1800,15 @@ class GRPOTrainer(BaseTrainer):
             ]
         else:
             images = None
+        
+        if "audio" in inputs[0]:
+            audios = [example.get("audio") for example in inputs]
+        else:
+            audios = None
 
         clog("images are ",images)
         clog("inputs is ",inputs)
+        clog("audios are ",audios)
         # Transformers requires at least one image in the batch, otherwise it throws an error
         if images is not None and all(img_list == [] for img_list in images):
             images = None
@@ -1793,7 +1819,7 @@ class GRPOTrainer(BaseTrainer):
             num_items_in_batch,
             sampling_per_token_logps_list,
             forward_kwargs,
-        ) = self._generate(prompts, images)
+        ) = self._generate(prompts, images, audios)
         clog("_generate_and_score_completions after _generate",
              f"num_items_in_batch={int(num_items_in_batch)}")
 
