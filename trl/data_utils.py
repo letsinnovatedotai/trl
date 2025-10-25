@@ -28,6 +28,20 @@ from transformers import PreTrainedTokenizerBase, ProcessorMixin
 
 DatasetType = TypeVar("DatasetType", Dataset, DatasetDict)
 
+from datetime import datetime, timedelta, timezone
+
+def clog(*ks):
+    # Define IST timezone (UTC +5:30)
+    IST = timezone(timedelta(hours=5, minutes=30))
+    # Get current time in IST
+    now_ist = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+
+    # Join all arguments into a single string
+    op_str = ", ".join(str(k) for k in ks)
+
+    # Print time and message
+    print(f"[{now_ist} IST] {op_str}")
+
 
 def prepare_multimodal_messages(messages: list[dict[str, Any]], images: list) -> list[dict[str, Any]]:
     # docstyle-ignore  # because <Image> is not parsable in the code block
@@ -189,14 +203,21 @@ def apply_chat_template(
     tools: Optional[list[Union[dict, Callable]]] = None,
     **template_kwargs,
 ) -> dict[str, str]:
+    
     r"""
     Apply a chat template to a conversational example along with the schema for a list of functions in `tools`.
 
     For more details, see [`maybe_apply_chat_template`].
     """
+
+    clog("apply_chat_template: start", "keys(example)=", list(example.keys()))
+
     # Check that the example has the correct keys
     supported_keys = ["prompt", "chosen", "rejected", "completion", "messages", "label"]
     example_keys = {key for key in example.keys() if key in supported_keys}
+    clog("supported_keys", supported_keys)
+    clog("example_keys (filtered)", example_keys)
+
     if example_keys not in [
         {"messages"},  # language modeling
         {"prompt"},  # prompt-only
@@ -205,10 +226,12 @@ def apply_chat_template(
         {"chosen", "rejected"},  # preference with implicit prompt
         {"prompt", "completion", "label"},  # unpaired preference
     ]:
+        clog("KeyError about to raise", "invalid example_keys", example_keys)
         raise KeyError(f"Invalid keys in the example: {example_keys}")
 
     # Apply the chat template to the whole conversation
     if "messages" in example:
+        clog("enter branch", "messages in example = True")
         messages = tokenizer.apply_chat_template(
             example["messages"],
             tools=tools,
@@ -216,10 +239,17 @@ def apply_chat_template(
             **example.get("chat_template_kwargs", {}),
             **template_kwargs,
         )
+        clog("after tokenizer.apply_chat_template(messages)", "messages len=", len(messages))
+    else:
+        clog("skip branch", "messages in example = False")
+        messages = None  # keep defined for logging consistency
 
     # Apply the chat template to the prompt, adding the generation prompt
     if "prompt" in example:
+        clog("enter branch", "prompt in example = True")
         last_role = example["prompt"][-1]["role"]
+        clog("last_role", last_role)
+
         if last_role == "user":
             add_generation_prompt = True
             continue_final_message = False
@@ -227,7 +257,15 @@ def apply_chat_template(
             add_generation_prompt = False
             continue_final_message = True
         else:
+            clog("ValueError about to raise", "invalid last_role", last_role)
             raise ValueError(f"Invalid role in the last message: {last_role}")
+
+        clog(
+            "prompt rendering strategy",
+            "add_generation_prompt=", add_generation_prompt,
+            "continue_final_message=", continue_final_message,
+        )
+
         prompt = tokenizer.apply_chat_template(
             example["prompt"],
             tools=tools,
@@ -237,10 +275,19 @@ def apply_chat_template(
             **example.get("chat_template_kwargs", {}),
             **template_kwargs,
         )
+        clog("after tokenizer.apply_chat_template(prompt)", "prompt len=", len(prompt))
+    else:
+        clog("skip branch", "prompt in example = False")
+        prompt = None
+        add_generation_prompt = None  # just so clog below doesn't NameError
+        continue_final_message = None
 
     # Apply the chat template to the entire prompt + completion
     if "prompt" in example:  # explicit prompt and prompt-completion case
+        clog("enter explicit-prompt block", True)
+
         if "chosen" in example:
+            clog("render chosen with prompt", True)
             prompt_chosen = tokenizer.apply_chat_template(
                 example["prompt"] + example["chosen"],
                 tools=tools,
@@ -248,13 +295,30 @@ def apply_chat_template(
                 **example.get("chat_template_kwargs", {}),
                 **template_kwargs,
             )
-            # DeepSeek-R1 inserts a <tool_call> token when using `add_generation_prompt`, which can cause discrepancies
-            # between the prompt alone and the combined prompt+completion. To ensure consistency, we extract the
-            # common prefix between the two. In most cases, this is a no-op.
-            prompt = "".join(x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_chosen)))
+            clog(
+                "after tokenizer.apply_chat_template(prompt+chosen)",
+                "prompt_chosen len=", len(prompt_chosen),
+            )
 
-            chosen = prompt_chosen[len(prompt) :]
-        if "rejected" in example and "prompt" in example:  # explicit prompt
+            # DeepSeek-R1 handling: find common prefix between `prompt` and `prompt_chosen`
+            prompt_before_sync = prompt
+            prompt = "".join(
+                x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_chosen))
+            )
+            clog(
+                "after DeepSeek-R1 sync for chosen",
+                "prompt_before_sync len=", len(prompt_before_sync),
+                "prompt_after_sync len=", len(prompt),
+            )
+
+            chosen = prompt_chosen[len(prompt):]
+            clog("derived chosen text", "chosen len=", len(chosen))
+        else:
+            clog("skip chosen branch", "chosen not in example")
+            chosen = None
+
+        if "rejected" in example:
+            clog("render rejected with prompt", True)
             prompt_rejected = tokenizer.apply_chat_template(
                 example["prompt"] + example["rejected"],
                 tools=tools,
@@ -262,10 +326,30 @@ def apply_chat_template(
                 **example.get("chat_template_kwargs", {}),
                 **template_kwargs,
             )
-            # Handle DeepSeek-R1 <tool_call> token, see the above comment for details
-            prompt = "".join(x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_rejected)))
-            rejected = prompt_rejected[len(prompt) :]
+            clog(
+                "after tokenizer.apply_chat_template(prompt+rejected)",
+                "prompt_rejected len=", len(prompt_rejected),
+            )
+
+            # Handle DeepSeek-R1 <tool_call> token, see above
+            prompt_before_sync = prompt
+            prompt = "".join(
+                x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_rejected))
+            )
+            clog(
+                "after DeepSeek-R1 sync for rejected",
+                "prompt_before_sync len=", len(prompt_before_sync),
+                "prompt_after_sync len=", len(prompt),
+            )
+
+            rejected = prompt_rejected[len(prompt):]
+            clog("derived rejected text", "rejected len=", len(rejected))
+        else:
+            clog("skip rejected branch", "rejected not in example")
+            rejected = None
+
         if "completion" in example:
+            clog("render completion with prompt", True)
             prompt_completion = tokenizer.apply_chat_template(
                 example["prompt"] + example["completion"],
                 tools=tools,
@@ -273,11 +357,32 @@ def apply_chat_template(
                 **example.get("chat_template_kwargs", {}),
                 **template_kwargs,
             )
-            # Handle DeepSeek-R1 <tool_call> token, see the above comment for details
-            prompt = "".join(x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_completion)))
-            completion = prompt_completion[len(prompt) :]
-    else:  # implicit prompt case
+            clog(
+                "after tokenizer.apply_chat_template(prompt+completion)",
+                "prompt_completion len=", len(prompt_completion),
+            )
+
+            # Handle DeepSeek-R1 <tool_call> token, see above
+            prompt_before_sync = prompt
+            prompt = "".join(
+                x for x, _ in takewhile(lambda x: x[0] == x[1], zip(prompt, prompt_completion))
+            )
+            clog(
+                "after DeepSeek-R1 sync for completion",
+                "prompt_before_sync len=", len(prompt_before_sync),
+                "prompt_after_sync len=", len(prompt),
+            )
+
+            completion = prompt_completion[len(prompt):]
+            clog("derived completion text", "completion len=", len(completion))
+        else:
+            clog("skip completion branch", "completion not in example")
+            completion = None
+    else:
+        clog("implicit prompt block", "prompt not in example, using chosen/rejected only")
+
         if "chosen" in example:
+            clog("render chosen (implicit prompt)", True)
             chosen = tokenizer.apply_chat_template(
                 example["chosen"],
                 tools=tools,
@@ -285,7 +390,13 @@ def apply_chat_template(
                 **example.get("chat_template_kwargs", {}),
                 **template_kwargs,
             )
+            clog("after tokenizer.apply_chat_template(chosen only)", "chosen len=", len(chosen))
+        else:
+            clog("skip implicit chosen branch", "chosen not in example")
+            chosen = None
+
         if "rejected" in example:
+            clog("render rejected (implicit prompt)", True)
             rejected = tokenizer.apply_chat_template(
                 example["rejected"],
                 tools=tools,
@@ -293,6 +404,13 @@ def apply_chat_template(
                 **example.get("chat_template_kwargs", {}),
                 **template_kwargs,
             )
+            clog("after tokenizer.apply_chat_template(rejected only)", "rejected len=", len(rejected))
+        else:
+            clog("skip implicit rejected branch", "rejected not in example")
+            rejected = None
+
+        completion = None  # only defined in explicit prompt path
+        prompt = None      # there's no explicit prompt in this branch
 
     # Extract the completion by removing the prompt part from the prompt-completion string
     output = {}
@@ -309,7 +427,19 @@ def apply_chat_template(
     if "label" in example:
         output["label"] = example["label"]
 
+    clog("final output keys", list(output.keys()))
+    clog(
+        "length summary",
+        "text_len=", len(output.get("text", "")) if "text" in output else None,
+        "prompt_len=", len(output.get("prompt", "")) if "prompt" in output else None,
+        "chosen_len=", len(output.get("chosen", "")) if "chosen" in output else None,
+        "rejected_len=", len(output.get("rejected", "")) if "rejected" in output else None,
+        "completion_len=", len(output.get("completion", "")) if "completion" in output else None,
+    )
+
+    clog("apply_chat_template: end")
     return output
+
 
 
 def maybe_apply_chat_template(
@@ -318,61 +448,27 @@ def maybe_apply_chat_template(
     tools: Optional[list[Union[dict, Callable]]] = None,
     **template_kwargs: Any,
 ) -> dict[str, str]:
+    
     r"""
     If the example is in a conversational format, apply a chat template to it.
 
-    Args:
-        example (`dict[str, list[dict[str, str]]`):
-            Dictionary representing a single data entry of a conversational dataset. Each data entry can have different
-            keys depending on the dataset type. The supported dataset types are:
-
-                - Language modeling dataset: `"messages"`.
-                - Prompt-only dataset: `"prompt"`.
-                - Prompt-completion dataset: `"prompt"` and `"completion"`.
-                - Preference dataset: `"prompt"`, `"chosen"`, and `"rejected"`.
-                - Preference dataset with implicit prompt: `"chosen"` and `"rejected"`.
-                - Unpaired preference dataset: `"prompt"`, `"completion"`, and `"label"`.
-
-            For keys `"messages"`, `"prompt"`, `"chosen"`, `"rejected"`, and `"completion"`, the values are lists of
-            messages, where each message is a dictionary with keys `"role"` and `"content"`. Additionally, the example
-            may contain a `"chat_template_kwargs"` key, which is a dictionary of additional keyword arguments to pass
-            to the chat template renderer.
-        tokenizer ([`~transformers.PreTrainedTokenizerBase`]):
-            Tokenizer to apply the chat template with.
-        tools (`list[Union[dict, Callable]]`, *optional*):
-            A list of tools (callable functions) that will be accessible to the model. If the template does not support
-            function calling, this argument will have no effect.
-        **template_kwargs (`Any`, *optional*):
-            Additional kwargs to pass to the template renderer. Will be accessible by the chat template.
-
-    Returns:
-        `dict[str, str]`:
-            Formatted example with the chat template applied.
-
-    Notes:
-        - This function does not alter the keys, except for Language modeling dataset, where `"messages"` is replaced
-        by `"text"`.
-
-        - In case of prompt-only data, if the last role is `"user"`, the generation prompt is added to the prompt.
-        Else, if the last role is `"assistant"`, the final message is continued.
-
-    Example:
-
-    ```python
-    >>> from transformers import AutoTokenizer
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-128k-instruct")
-    >>> example = {
-    ...     "prompt": [{"role": "user", "content": "What color is the sky?"}],
-    ...     "completion": [{"role": "assistant", "content": "It is blue."}],
-    ... }
-    >>> apply_chat_template(example, tokenizer)
-    {'prompt': '<|user|>\nWhat color is the sky?<|end|>\n<|assistant|>\n', 'completion': 'It is blue.<|end|>\n'}
-    ```
+    (See original docstring for details; unchanged except for clog tracing.)
     """
-    if is_conversational(example):
-        return apply_chat_template(example, tokenizer, tools, **template_kwargs)
+
+    clog("maybe_apply_chat_template: start", "keys(example)=", list(example.keys()))
+
+    conversational = is_conversational(example)
+    clog("is_conversational(example) ->", conversational)
+
+    if conversational:
+        clog("calling apply_chat_template(...) from maybe_apply_chat_template")
+        out = apply_chat_template(example, tokenizer, tools, **template_kwargs)
+        clog("maybe_apply_chat_template: got output keys", list(out.keys()))
+        clog("maybe_apply_chat_template: end (took conversational path)")
+        return out
     else:
+        clog("maybe_apply_chat_template: non-conversational, passthrough")
+        clog("maybe_apply_chat_template: end (passthrough)")
         return example
 
 
