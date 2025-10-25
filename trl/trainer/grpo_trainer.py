@@ -1374,7 +1374,7 @@ class GRPOTrainer(BaseTrainer):
                 if isinstance(prompt, list):  # i.e., when using conversational data
                     prepare_multimodal_messages(prompt, num_images=len(image_list))
 
-        clog( f"self.processing_class={self.processing_class}")    
+        #clog( f"self.processing_class={self.processing_class}")    
         prompts_text = [
             maybe_apply_chat_template({"prompt": prompt}, self.processing_class)[
                 "prompt"
@@ -1647,7 +1647,7 @@ class GRPOTrainer(BaseTrainer):
                 if self.is_fsdp_enabled
                 else nullcontext(),
             ):
-                clog( f"unwrapped_model={unwrapped_model}")
+                #clog( f"unwrapped_model={unwrapped_model}")
                 clog( f"generate_inputs={generate_inputs}")
                 clog( f"generation_config={self.generation_config}")
                 prompt_completion_ids = unwrapped_model.generate(
